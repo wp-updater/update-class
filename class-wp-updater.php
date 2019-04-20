@@ -9,6 +9,9 @@ class WP_Updater {
     private $currentVersion;
     private $slug;
 
+    private $endpointPackage = 'http://wordpresss-updater.local/api/package/';
+    private $endpointDetails = 'http://wordpresss-updater.local/api/detail/';
+
     public function __construct($url, $directory, $file)
     {
         $this->url = $url;
@@ -42,34 +45,19 @@ class WP_Updater {
     private function register_ui_methods_for_plugin()
     {
         add_filter( 'site_transient_update_plugins', [ $this, 'update_transients' ], 20, 1 );
-        add_filter('plugins_api_result', [ $this, 'plugins_api_result'], 20, 3);
+        //add_filter('plugins_api_result', [ $this, 'plugins_api_result'], 20, 3);
         add_filter('plugins_api', [ $this, 'plugins_api'], 20, 3);
         wp_plugin_update_row($this->file, []);
-//        add_filter('plugin_row_meta', [$this, 'test'], 20, 4);
     }
 
     public function plugins_api($res, $action, $args) {
         if($action === 'plugin_information'){
             if($args->slug == $this->slug) {
-                return $this->get_remote_details_information();
-                //var_dump($res, $action, $args); wp_die();
-
+                return $this->get_remote_plugin_details_information();
             }
         }
         return $res;
 
-    }
-
-    public function plugins_api_result($res, $action, $args) {
-        //return true;
-        if($action === 'plugin_information'){
-            if($args->slug == $this->slug) {
-                return $this->get_remote_details_information();
-
-            }
-        }
-
-        return $res;
     }
 
     public function update_transients($transient)
@@ -82,9 +70,10 @@ class WP_Updater {
             $transient->response = array();
         }
 
-        if(!array_key_exists($this->file, $transient->response)) {
-            $response = $this->get_remote_version_information();
+        if(!array_key_exists($this->get_transient_slug(), $transient->response)) {
+            $response = $this->get_remote_plugin_version_information();
             $this->slug = $response->slug;
+
             if(version_compare($this->currentVersion, $response->version, '<')) {
                 $transient->response[$this->get_transient_slug()] = (object) [
                     'slug'         => $response->slug, // Whatever you want, as long as it's not on WordPress.org
@@ -94,7 +83,6 @@ class WP_Updater {
                 ];
             }
         }
-        //var_dump($transient); wp_die();
         return $transient;
     }
 
@@ -105,16 +93,37 @@ class WP_Updater {
         return $slug;
     }
 
-    public function get_remote_details_information()
+    /**
+     * Retrieve information for when the user clicks view more details
+     *
+     * @return array|mixed|object
+     */
+    public function get_remote_plugin_details_information()
     {
-        return new stdClass();
-    }
-
-    public function get_remote_version_information()
-    {
-        $response = wp_remote_post($this->url, [
+        $response = wp_remote_post($this->endpointDetails . $this->url, [
             'headers'     => ['Content-Type' => 'application/json; charset=utf-8'],
         ]);
+
+        $body = json_decode($response['body']);
+        // convert sections and banners into arrays
+        $body->sections = (array)$body->sections;
+        $body->banners = (array)$body->banners;
+
+        return $body;
+    }
+
+    /**
+     * Retrieve version information for this plugin
+     *
+     * @return array|mixed|object
+     */
+    public function get_remote_plugin_version_information()
+    {
+
+        $response = wp_remote_post($this->endpointPackage . $this->url, [
+            'headers'     => ['Content-Type' => 'application/json; charset=utf-8'],
+        ]);
+
 
         return json_decode($response['body']);
     }
