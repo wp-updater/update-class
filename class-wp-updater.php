@@ -36,8 +36,8 @@ class WP_Updater
      */
     public function debug()
     {
-        //delete_transient('update_themes');
-        //delete_transient('update_plugins');
+//        delete_transient('update_themes');
+//        delete_transient('update_plugins');
     }
 
     private function current_version(): ?string
@@ -70,7 +70,7 @@ class WP_Updater
     private function register_hooks_for_plugin(): void
     {
         // check for plugin updates
-        add_filter('pre_set_site_transient_update_plugins', [$this, 'update_plugin_transients'], 20, 1);
+        add_filter('site_transient_update_plugins', [$this, 'update_plugin_transients'], 20, 1);
 
         // display plugin details when view more details is pressed
         add_filter('plugins_api', [$this, 'plugins_api'], 20, 3);
@@ -95,7 +95,6 @@ class WP_Updater
         if (!isset($transient->response) || !is_array($transient->response)) {
             $transient->response = [];
         }
-//        var_dump($transient); wp_die();
 
         if (!array_key_exists($this->get_theme_transient_slug(), $transient->response)) {
             $response = $this->get_remote_theme_version_information();
@@ -133,6 +132,8 @@ class WP_Updater
                 'url' => $response->url,
                 'package' => $response->package
             ];
+        } else {
+            $this->slug = $transient->response[$this->get_plugin_transient_slug()]->slug;
         }
         return $transient;
     }
@@ -180,12 +181,17 @@ class WP_Updater
      */
     private function remote_post($uri) {
         global $wp_version;
-        $response = wp_remote_post($uri, [
-            'headers' => [
-                'Content-Type' => 'application/json; charset=utf-8',
-                'user-agent' => 'WordPress/' . $wp_version . '; ' . home_url('/')
-            ]
-        ]);
+        if ( false === ( $response = get_transient( md5($uri) ) ) ) {
+            $response = wp_remote_post($uri, [
+                'headers' => [
+                    'Content-Type' => 'application/json; charset=utf-8',
+                    'user-agent' => 'WordPress/' . $wp_version . '; ' . home_url('/')
+                ]
+            ]);
+            set_transient(md5($uri), $response, 5 * 60);
+        }
+
+
 
         return json_decode($response['body']);
     }
